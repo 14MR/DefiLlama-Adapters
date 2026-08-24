@@ -1,10 +1,34 @@
 const axios = require('axios')
 
 const endpoint = 'https://api.provable.com/v1/mainnet'
+const endpointV2 = 'https://api.provable.com/v2/mainnet'
 
-async function aQuery(path) {
-  const { data } = await axios.get(`${endpoint}${path}`, { timeout: 3000 })
+async function aQuery(path, base = endpoint) {
+  const { data } = await axios.get(`${base}${path}`, { timeout: 30000 })
   return data
+}
+
+/**
+ * Every program deployed on Aleo, as `{ id: 'credits.aleo', ... }` entries. Aleo mappings cannot be
+ * enumerated by key, so this is how a protocol's token programs get discovered before their state is
+ * read back with getProgramMappingValue.
+ */
+async function getDeployedPrograms() {
+  const programs = await aQuery('/programs/summary', endpointV2)
+  if (!Array.isArray(programs) || !programs.length) throw new Error('aleo: could not list deployed programs')
+  return programs
+}
+
+/**
+ * The token id a dynamic ARC-20 program is addressed by is its own name, without the `.aleo`
+ * suffix, packed into a field as little-endian ASCII. e.g. `arc20_eth.aleo` is
+ * `1926848598207449231969field`.
+ */
+function programTokenId(programId) {
+  const name = Buffer.from(programId.replace(/\.aleo$/, ''), 'ascii')
+  let id = 0n
+  for (let i = name.length - 1; i >= 0; i--) id = (id << 8n) | BigInt(name[i])
+  return `${id}field`
 }
 
 /**
@@ -46,6 +70,8 @@ async function sumTokens({ owners = [], api }) {
 }
 
 module.exports = {
+  getDeployedPrograms,
   getProgramMappingValue,
+  programTokenId,
   sumTokens,
 }
